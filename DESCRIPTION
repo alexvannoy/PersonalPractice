@@ -1,0 +1,23 @@
+Package: PersonalPractice
+Title: What the Package Does: Gives me a place to pratice coding R6 OOP in R and asynchronous programming in R.
+Version: 0.0.0.1
+Authors@R: 
+    person(given = "Alexander",
+           family = "Vannoy",
+           role = c("aut", "cre"),
+           email = "avannoy@metabolon.com")
+Description: Gives me a place to practice coding R6 classes and methods and generally improve at stuff in R. Trying to update github documentation.
+License: GPL (>= 2)
+Encoding: UTF-8
+LazyData: true
+Imports:
+    R6 (>= 2.4.0),
+    future (>= 1.15.0),
+    shiny (>= 1.4.0),
+    shinyMobile (>= 0.2.0.9000)
+Suggests: 
+    devtools (>= 2.2.1),
+    logging (>= 0.10.108),
+    roxygen2 (>= 7.0.0),
+    testthat (>= 2.1.0),
+RoxygenNote: 6.1.1
