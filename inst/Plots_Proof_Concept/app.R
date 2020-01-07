@@ -81,6 +81,8 @@ server <- function(input, output, session) {
         data$Sample = 1:nrow(data)
         data
         #TODO: Format the data (better) such that the data frame is consistent across sample sets
+        #It will likely be prudent to track the log data and the meta data separately.
+        #TODO: log transform the data prior to performing PCA on it
     })
 
     output$samplesToRemove = renderUI({
@@ -125,9 +127,7 @@ server <- function(input, output, session) {
             paste0("c(", paste0("input$col", sort(
                 as.character(prinCompData()$Group)
             ), collapse = ", "), ")")
-        #logging::logdebug(customColors)
         customColors <- eval(parse(text = customColors))
-        #logging::logdebug(customColors)
 
         plotData = prinCompData()
         # To prevent errors
@@ -135,9 +135,6 @@ server <- function(input, output, session) {
 
         plotData = plotData[order(plotData$Group),]
         plotData$Color = customColors
-
-        logging::logdebug(dim(plotData))
-        logging::logdebug(plotData$Color)
 
         logging::logdebug("Rendering Plot")
         PCA3D <- plot_ly(
