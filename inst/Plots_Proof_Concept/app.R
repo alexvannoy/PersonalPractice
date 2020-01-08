@@ -33,23 +33,45 @@ ui <- fluidPage(
 
             textInput("pcaTitle", "PCA Title", value = "PCA"),
 
+            hr(),
+            checkboxInput("includeLabels", label = "Include Labels", value = FALSE),
+            hr(),
+
             uiOutput("columnChoices"),
-            uiOutput("myPanel")
+            uiOutput("colorPanel"),
+            uiOutput("pchPanel")
         ),
         tabPanel("Samples to Remove",
                  uiOutput("samplesToRemove"))
     )),
 
-    mainPanel(
-        plotlyOutput("plot"),
-        verbatimTextOutput("hover"),
-        verbatimTextOutput("click")
-    )
+    mainPanel(plotlyOutput("plot"))
 )
 
 server <- function(input, output, session) {
-    output$myPanel <- renderUI({
-        logging::logdebug("Within myPanel")
+    validPCH = c("circle",
+                 "square",
+                 "diamond",
+                 "cross",
+                 "x")
+
+    output$pchPanel <- renderUI({
+        logging::logdebug("Within pchPanel")
+        lev <- sort(unique(as.character(prinCompData()$Group)))
+        customPCH <- validPCH[length(lev)]
+
+        lapply(seq_along(lev), function(i) {
+            selectInput(
+                inputId = paste0("pch", lev[i]),
+                label = paste0("Choose point type for ", lev[i]),
+                choices = validPCH,
+                selected = validPCH[1]
+            )
+        })
+    })
+
+    output$colorPanel <- renderUI({
+        logging::logdebug("Within colorPanel")
         lev <- sort(unique(as.character(prinCompData()$Group)))
         customColors <- gg_fill_hue(length(lev))
 
@@ -104,7 +126,7 @@ server <- function(input, output, session) {
         logging::logdebug("Removing Samples")
         data = dataFrame()
         if (!is.null(input$samplesToRemove)) {
-            data = data[-(which(data$Sample %in% input$samplesToRemove)), ]
+            data = data[-(which(data$Sample %in% input$samplesToRemove)),]
         }
         PCAdata = princomp(data[, 2:ncol(data)], cor = TRUE)
         PCAdata = data.frame(
@@ -122,50 +144,82 @@ server <- function(input, output, session) {
             ), collapse = ", "), ")")
         customColors <- eval(parse(text = customColors))
 
+        customPCH <-
+            paste0("c(", paste0("input$pch", sort(
+                as.character(unique(prinCompData()$Group))
+            ), collapse = ", "), ")")
+        logging::logdebug(customPCH)
+        customPCH <- eval(parse(text = customPCH))
+        logging::logdebug(customPCH)
+
         plotData = prinCompData()
         # To prevent errors
         req(length(customColors) == nrow(plotData))
+        req(length(customPCH) == length(unique(plotData$Group)))
 
-        plotData = plotData[order(plotData$Group),]
+        plotData = plotData[order(plotData$Group), ]
         plotData$Color = customColors
 
+        textOptions = list(family = "sans serif",
+                           size = 14,
+                           color = toRGB("grey50"))
+
         logging::logdebug("Rendering Plot")
-        PCA3D <- plot_ly(
-            prinCompData(),
-            x = plotData$Comp.1,
-            y = plotData$Comp.2,
-            z = plotData$Comp.3,
-            type = "scatter3d",
-            mode = "markers",
-            color = plotData$Group,
-            colors = customColors,
-            marker = list(size = pointSize())
-        ) %>%
+        logging::logdebug(unique(customPCH))
+        if(length(unique(customPCH)) > 1) {
+            PCA3D <- plot_ly(
+                plotData,
+                x = plotData$Comp.1,
+                y = plotData$Comp.2,
+                z = plotData$Comp.3,
+                text =  paste0("Sample: ", plotData$Sample),
+                type = "scatter3d",
+                mode = "markers",
+                color = plotData$Group,
+                colors = customColors,
+                symbol = ~Group,
+                symbols = customPCH,
+                marker = list(size = pointSize())
+            )}
+        else{
+            PCA3D <- plot_ly(
+                plotData,
+                x = plotData$Comp.1,
+                y = plotData$Comp.2,
+                z = plotData$Comp.3,
+                text =  paste0("Sample: ", plotData$Sample),
+                type = "scatter3d",
+                mode = "markers",
+                color = plotData$Group,
+                colors = customColors,
+                symbol = I(unique(customPCH)),
+                marker = list(size = pointSize())
+            )
+            }
+        PCA3D %>%
             layout(
                 title = input$pcaTitle,
                 scene = list(
                     xaxis = list(title = "PC1"),
                     yaxis = list(title = "PC2"),
                     zaxis = list(title = "PC3")
-                )
+                ),
+                legend = list(y = 0.8, yanchor = "top")
             ) %>%
-            add_trace(
-                text = paste0("Sample: ", plotData$Sample),
-                hoverinfo = text,
-                showlegend = FALSE
-            ) %>%
-            add_annotations(
-                text = input$Group,
-                xref = "paper",
-                yref = "paper",
-                x = 1.02,
-                xanchor = "left",
-                y = 0.8,
-                yanchor = "bottom",
-                legendtitle = TRUE,
-                showarrow = FALSE
-            ) %>%
-            layout(legend = list(y = 0.8, yanchor = "top"))
+            {
+                #TODO: Figure out a way to avoid the warning this throws. It's not clear why.
+                if (input$includeLabels) {
+                    add_text(
+                        .,
+                        text = plotData$Sample,
+                        textfont = textOptions,
+                        textposition = "top",
+                        showlegend = FALSE
+                    )
+                } else {
+                    .
+                }
+            }
     })
 
 
