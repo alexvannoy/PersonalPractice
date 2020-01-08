@@ -2,6 +2,7 @@ library(plotly)
 library(shiny)
 library(shinyjs)
 library(logging)
+library(colourpicker)
 
 setLevel("DEBUG")
 
@@ -19,14 +20,6 @@ ui <- fluidPage(
     sidebarPanel(tabsetPanel(
         tabPanel(
             "Sample Set",
-
-            #May remove this. Not clear yet.
-            selectInput(
-                inputId = "plotType",
-                label = "Plot Type:",
-                choices = c("Boxplot", "Lineplot", "RBoxplot", "2D PCA", "3D PCA"),
-                selected = "3D PCA"
-            ),
 
             numericInput("SSID", label = "SSID", value = 1),
 
