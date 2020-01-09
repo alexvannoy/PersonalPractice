@@ -23,8 +23,18 @@ ui <- fluidPage(
 
             numericInput("SSID", label = "SSID", value = 2),
 
+            textInput("pcaTitle", "Plot Title", value = "PCA")
+        ),
+        tabPanel(
+            "Meta data",
             hr(),
             actionButton("resetDefaults", "Reset to Defaults"),
+            hr(),
+
+            checkboxInput("includeLabels", label = "Include Labels", value = FALSE),
+            hr(),
+
+            uiOutput("columnChoices"),
             hr(),
 
             sliderInput(
@@ -34,16 +44,15 @@ ui <- fluidPage(
                 max = 8,
                 value = 4
             ),
-
-            textInput("pcaTitle", "PCA Title", value = "PCA"),
-
-            hr(),
-            checkboxInput("includeLabels", label = "Include Labels", value = FALSE),
             hr(),
 
-            uiOutput("columnChoices"),
             uiOutput("colorPanel"),
-            uiOutput("pchPanel")
+
+            hr(),
+            uiOutput("pchPanel"),
+
+            hr(),
+            uiOutput("legendLabels")
         ),
         tabPanel("Samples to Remove",
                  uiOutput("samplesToRemove"))
@@ -65,9 +74,9 @@ server <- function(input, output, session) {
         #Depends on SSID
         #TODO: Fetch data from somewhere
         if (input$SSID == 1) {
-            data = data.frame(iris[c(5,1:4)])
-        } else {
-            data = data.frame(mtcars[, c(2,1,3:11)])
+            data = data.frame(iris[c(5, 1:4)])
+        } else if (input$SSID == 2) {
+            data = data.frame(mtcars[, c(2, 1, 3:11)])
         }
         data$Sample = 1:nrow(data)
         data
@@ -76,7 +85,7 @@ server <- function(input, output, session) {
         #TODO: log transform the data prior to performing PCA on it
     })
 
-    #Initialize some UI stuff
+    #Initialize some reactive UI stuff
     output$samplesToRemove <- renderUI({
         #Depends on dataFrame(SSID)
         logging::loginfo("sampleToRemove")
@@ -104,16 +113,16 @@ server <- function(input, output, session) {
             data = data[-(which(data$Sample %in% input$samplesToRemove)),]
         }
         PCAdata = princomp(data[, 2:ncol(data)], cor = TRUE)
-        if(is.null(input$Group)){
+        if (is.null(input$Group)) {
             PCAdata = data.frame(
                 PCAdata$scores,
-                "Group" = as.factor(as.character(data[,1])),
+                "Group" = as.factor(as.character(data[, 1])),
                 "Sample" = data$Sample
             )
         } else {
             PCAdata = data.frame(
                 PCAdata$scores,
-                "Group" = as.factor(as.character(data[,which(colnames(data) == input$Group)])),
+                "Group" = as.factor(as.character(data[, which(colnames(data) == input$Group)])),
                 "Sample" = data$Sample
             )
         }
@@ -127,9 +136,8 @@ server <- function(input, output, session) {
                      output$pchPanel <- renderUI({
                          logging::loginfo("pchPanel")
                          #Depends on prinCompDate(samplesToRemove, dataFrame(SSID)), dataFrame(SSID), customPCH(self)
-                         lev <- sort(unique(as.character(prinCompData()$Group)))
-                         customPCH <- validPCH[length(lev)]
-
+                         lev <-
+                             unique(as.character(prinCompData()$Group))
                          lapply(seq_along(lev), function(i) {
                              selectInput(
                                  inputId = paste0("pch", lev[i]),
@@ -142,7 +150,8 @@ server <- function(input, output, session) {
                      output$colorPanel <- renderUI({
                          #Depends on prinCompDate(samplesToRemove, dataFrame(SSID)), dataFrame(SSID), customColors(self)
                          logging::loginfo("colorPanel")
-                         lev <- sort(unique(as.character(prinCompData()$Group)))
+                         lev <-
+                             unique(as.character(prinCompData()$Group))
                          customColors <- gg_fill_hue(length(lev))
 
                          lapply(seq_along(lev), function(i) {
@@ -150,6 +159,19 @@ server <- function(input, output, session) {
                                  inputId = paste0("col", lev[i]),
                                  label = paste0("Choose color for ", lev[i]),
                                  value = unique(customColors())[i]
+                             )
+                         })
+                     })
+                     output$legendLabels <- renderUI({
+                         logging::loginfo("legendLabels")
+                         customLegend <-
+                             unique(as.character(prinCompData()$Group))
+
+                         lapply(seq_along(customLegend), function(i) {
+                             textInput(
+                                 inputId = paste0("legend", customLegend[i]),
+                                 label = paste0("Choose legend label for ", customLegend[i]),
+                                 value = unique(customLegend())[i]
                              )
                          })
                      })
@@ -161,14 +183,17 @@ server <- function(input, output, session) {
         logging::loginfo("customColors()")
         customColors <-
             paste0("c(",
-                   paste0("input$col", sort(
+                   paste0(
+                       "input$col",
                        as.character(prinCompData()$Group)
-                   ), collapse = ", "),
+                       ,
+                       collapse = ", "
+                   ),
                    ")")
         customColors <-
             eval(parse(text = customColors))
-        if(any(customColors == "#FFFFFF")){
-            lev <- sort(unique(as.character(prinCompData()$Group)))
+        if (any(customColors == "#FFFFFF")) {
+            lev <- unique(as.character(prinCompData()$Group))
             customColors <- gg_fill_hue(length(lev))
         }
         customColors
@@ -179,23 +204,36 @@ server <- function(input, output, session) {
         logging::loginfo("customPCH()")
         customPCH <-
             paste0("c(",
-                   paste0("input$pch", sort(as.character(
-                       unique(prinCompData()$Group)
+                   paste0("input$pch", as.character(unique(
+                       prinCompData()$Group
                    )), collapse = ", "),
                    ")")
-        logging::logdebug(names(input)[grep("pch", names(input))])
-        logging::logdebug(grep("pch", names(input)))
-        # if(!is.null(names(input)[grep("pch", names(input))])){
-        #     logging::logdebug(paste0(input[grep("pch", names(input))]))
-        # }
-        logging::logdebug(customPCH)
         customPCH <- eval(parse(text = customPCH))
-        logging::logdebug(customPCH)
-        if(any(customPCH == "")) {
+        if (any(customPCH == "")) {
             logging::logwarn("custom PCH had empty value")
             customPCH[1:length(unique(prinCompData()$Group))] = "circle"
         }
         customPCH
+    })
+
+    #Define legend labels
+    customLegend <- reactive({
+        logging::loginfo("customLegend()")
+        customLegend <-
+            paste0("c(",
+                   paste0(
+                       "input$legend",
+                       as.character(prinCompData()$Group)
+                       ,
+                       collapse = ", "
+                   ),
+                   ")")
+        customLegend <- eval(parse(text = customLegend))
+        if (any(customLegend == "")) {
+            logging::logwarn("custom Legend had empty value")
+            customLegend = as.character(prinCompData()$Group)
+        }
+        customLegend
     })
 
     #Create the plot
@@ -203,13 +241,17 @@ server <- function(input, output, session) {
         logging::loginfo("PCA3D()")
         plotColors = customColors()
         plotPCH = customPCH()
+        plotLegend = customLegend()
 
         plotData = prinCompData()
+
         # To prevent errors
         req(length(plotColors) == nrow(plotData))
+        req(length(plotLegend) == nrow(plotData))
         req(length(plotPCH) == length(unique(plotData$Group)))
 
         plotData$Color = plotColors
+        plotData$Group = plotLegend
 
         textOptions = list(family = "sans serif",
                            size = 14,
@@ -221,7 +263,7 @@ server <- function(input, output, session) {
                 x = plotData$Comp.1,
                 y = plotData$Comp.2,
                 z = plotData$Comp.3,
-                text =  paste0("Sample: ", plotData$Sample),
+                text = plotData$Sample,
                 type = "scatter3d",
                 mode = "markers",
                 color = plotData$Group,
@@ -261,7 +303,7 @@ server <- function(input, output, session) {
                 if (input$includeLabels) {
                     add_text(
                         .,
-                        text = plotData$Sample,
+                        text = paste0("Sample: ", plotData$Sample),
                         textfont = textOptions,
                         textposition = "top",
                         showlegend = FALSE
@@ -284,7 +326,7 @@ server <- function(input, output, session) {
                      output$pchPanel <- renderUI({
                          logging::loginfo("resetDefaults pchPanel")
                          lev <-
-                             sort(unique(as.character(prinCompData()$Group)))
+                             unique(as.character(prinCompData()$Group))
                          customPCH <- validPCH[length(lev)]
 
                          lapply(seq_along(lev), function(i) {
@@ -300,7 +342,7 @@ server <- function(input, output, session) {
                      output$colorPanel <- renderUI({
                          logging::loginfo("resetDefaults colorPanel")
                          lev <-
-                             sort(unique(as.character(prinCompData()$Group)))
+                             unique(as.character(prinCompData()$Group))
                          customColors <- gg_fill_hue(length(lev))
 
                          lapply(seq_along(lev), function(i) {
@@ -308,6 +350,20 @@ server <- function(input, output, session) {
                                  inputId = paste0("col", lev[i]),
                                  label = paste0("Choose color for ", lev[i]),
                                  value = unique(customColors)[i]
+                             )
+                         })
+                     })
+
+                     output$legendLabels <- renderUI({
+                         logging::loginfo("resetDefaults legendLabels")
+                         customLegend <-
+                             unique(as.character(prinCompData()$Group))
+
+                         lapply(seq_along(customLegend), function(i) {
+                             textInput(
+                                 inputId = paste0("legend", customLegend[i]),
+                                 label = paste0("Choose legend label for ", customLegend[i]),
+                                 value = customLegend[i]
                              )
                          })
                      })
