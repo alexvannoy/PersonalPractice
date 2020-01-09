@@ -21,7 +21,11 @@ ui <- fluidPage(
         tabPanel(
             "Sample Set",
 
-            numericInput("SSID", label = "SSID", value = 1),
+            numericInput("SSID", label = "SSID", value = 2),
+
+            hr(),
+            actionButton("resetDefaults", "Reset to Defaults"),
+            hr(),
 
             sliderInput(
                 "pointSize",
@@ -55,44 +59,16 @@ server <- function(input, output, session) {
                  "cross",
                  "x")
 
-    output$pchPanel <- renderUI({
-        logging::logdebug("Within pchPanel")
-        lev <- sort(unique(as.character(prinCompData()$Group)))
-        customPCH <- validPCH[length(lev)]
-
-        lapply(seq_along(lev), function(i) {
-            selectInput(
-                inputId = paste0("pch", lev[i]),
-                label = paste0("Choose point type for ", lev[i]),
-                choices = validPCH,
-                selected = validPCH[1]
-            )
-        })
-    })
-
-    output$colorPanel <- renderUI({
-        logging::logdebug("Within colorPanel")
-        lev <- sort(unique(as.character(prinCompData()$Group)))
-        customColors <- gg_fill_hue(length(lev))
-
-        lapply(seq_along(lev), function(i) {
-            colourInput(
-                inputId = paste0("col", lev[i]),
-                label = paste0("Choose color for ", lev[i]),
-                value = customColors[i]
-            )
-        })
-    })
-
-    dataFrame = reactive({
-        logging::logdebug("Loading data frame")
+    #Read in data
+    dataFrame <- reactive({
+        logging::loginfo("dataFrame()")
+        #Depends on SSID
         #TODO: Fetch data from somewhere
         if (input$SSID == 1) {
-            data = data.frame(cbind(iris$Species, iris[, 1:4]))
+            data = data.frame(iris[c(5,1:4)])
         } else {
-            data = data.frame(cbind(mtcars[, "cyl"], mtcars[, 3:7]))
+            data = data.frame(mtcars[, c(2,1,3:11)])
         }
-        colnames(data)[1] = "Group"
         data$Sample = 1:nrow(data)
         data
         #TODO: Format the data (better) such that the data frame is consistent across sample sets
@@ -100,73 +76,146 @@ server <- function(input, output, session) {
         #TODO: log transform the data prior to performing PCA on it
     })
 
-    output$samplesToRemove = renderUI({
-        logging::logdebug("Selecting samples to remove")
+    #Initialize some UI stuff
+    output$samplesToRemove <- renderUI({
+        #Depends on dataFrame(SSID)
+        logging::loginfo("sampleToRemove")
         checkboxGroupInput("samplesToRemove",
                            label = "Samples to remove",
                            choices = dataFrame()[, which(colnames(dataFrame()) == "Sample")])
     })
-
-    output$columnChoices = renderUI({
-        logging::logdebug("Selecting group column")
+    output$columnChoices <- renderUI({
+        #Depends on dataFrame(SSID)
+        logging::loginfo("Group")
         selectInput(
             "Group",
             "Grouping Column",
             choices = colnames(dataFrame()),
-            selected = "Group"
+            selected = colnames(dataFrame())[1]
         )
     })
 
-    pointSize = reactive({
-        logging::logdebug("Rescaling points")
-        input$pointSize
-    })
-
-    prinCompData = reactive({
-        logging::logdebug("Removing Samples")
+    #Compute the PCA
+    prinCompData <- reactive({
+        logging::loginfo("prinCompData()")
+        #Depends on samplesToRemove, dataFrame(SSID), and Group
         data = dataFrame()
         if (!is.null(input$samplesToRemove)) {
             data = data[-(which(data$Sample %in% input$samplesToRemove)),]
         }
         PCAdata = princomp(data[, 2:ncol(data)], cor = TRUE)
-        PCAdata = data.frame(
-            PCAdata$scores,
-            "Group" = as.factor(data$Group),
-            "Sample" = data$Sample
-        )
+        if(is.null(input$Group)){
+            PCAdata = data.frame(
+                PCAdata$scores,
+                "Group" = as.factor(as.character(data[,1])),
+                "Sample" = data$Sample
+            )
+        } else {
+            PCAdata = data.frame(
+                PCAdata$scores,
+                "Group" = as.factor(as.character(data[,which(colnames(data) == input$Group)])),
+                "Sample" = data$Sample
+            )
+        }
+        PCAdata = PCAdata[order(PCAdata$Group),]
         PCAdata
     })
 
-    output$plot <- renderPlotly({
-        customColors <-
-            paste0("c(", paste0("input$col", sort(
-                as.character(prinCompData()$Group)
-            ), collapse = ", "), ")")
-        customColors <- eval(parse(text = customColors))
+    observeEvent(input$Group,
+                 {
+                     #Render some plot UI stuff
+                     output$pchPanel <- renderUI({
+                         logging::loginfo("pchPanel")
+                         #Depends on prinCompDate(samplesToRemove, dataFrame(SSID)), dataFrame(SSID), customPCH(self)
+                         lev <- sort(unique(as.character(prinCompData()$Group)))
+                         customPCH <- validPCH[length(lev)]
 
+                         lapply(seq_along(lev), function(i) {
+                             selectInput(
+                                 inputId = paste0("pch", lev[i]),
+                                 label = paste0("Choose point type for ", lev[i]),
+                                 choices = validPCH,
+                                 selected = customPCH()[i]
+                             )
+                         })
+                     })
+                     output$colorPanel <- renderUI({
+                         #Depends on prinCompDate(samplesToRemove, dataFrame(SSID)), dataFrame(SSID), customColors(self)
+                         logging::loginfo("colorPanel")
+                         lev <- sort(unique(as.character(prinCompData()$Group)))
+                         customColors <- gg_fill_hue(length(lev))
+
+                         lapply(seq_along(lev), function(i) {
+                             colourInput(
+                                 inputId = paste0("col", lev[i]),
+                                 label = paste0("Choose color for ", lev[i]),
+                                 value = unique(customColors())[i]
+                             )
+                         })
+                     })
+                 })
+
+    #Define the colors
+    customColors <- reactive({
+        #Depends on prinCompDate(samplesToRemove, dataFrame(SSID)), dataFrame(SSID), colorPanel(self)
+        logging::loginfo("customColors()")
+        customColors <-
+            paste0("c(",
+                   paste0("input$col", sort(
+                       as.character(prinCompData()$Group)
+                   ), collapse = ", "),
+                   ")")
+        customColors <-
+            eval(parse(text = customColors))
+        if(any(customColors == "#FFFFFF")){
+            lev <- sort(unique(as.character(prinCompData()$Group)))
+            customColors <- gg_fill_hue(length(lev))
+        }
+        customColors
+    })
+
+    #Define the PCH
+    customPCH <- reactive({
+        logging::loginfo("customPCH()")
         customPCH <-
-            paste0("c(", paste0("input$pch", sort(
-                as.character(unique(prinCompData()$Group))
-            ), collapse = ", "), ")")
+            paste0("c(",
+                   paste0("input$pch", sort(as.character(
+                       unique(prinCompData()$Group)
+                   )), collapse = ", "),
+                   ")")
+        logging::logdebug(names(input)[grep("pch", names(input))])
+        logging::logdebug(grep("pch", names(input)))
+        # if(!is.null(names(input)[grep("pch", names(input))])){
+        #     logging::logdebug(paste0(input[grep("pch", names(input))]))
+        # }
         logging::logdebug(customPCH)
         customPCH <- eval(parse(text = customPCH))
         logging::logdebug(customPCH)
+        if(any(customPCH == "")) {
+            logging::logwarn("custom PCH had empty value")
+            customPCH[1:length(unique(prinCompData()$Group))] = "circle"
+        }
+        customPCH
+    })
+
+    #Create the plot
+    PCA3D <- reactive({
+        logging::loginfo("PCA3D()")
+        plotColors = customColors()
+        plotPCH = customPCH()
 
         plotData = prinCompData()
         # To prevent errors
-        req(length(customColors) == nrow(plotData))
-        req(length(customPCH) == length(unique(plotData$Group)))
+        req(length(plotColors) == nrow(plotData))
+        req(length(plotPCH) == length(unique(plotData$Group)))
 
-        plotData = plotData[order(plotData$Group), ]
-        plotData$Color = customColors
+        plotData$Color = plotColors
 
         textOptions = list(family = "sans serif",
                            size = 14,
                            color = toRGB("grey50"))
 
-        logging::logdebug("Rendering Plot")
-        logging::logdebug(unique(customPCH))
-        if(length(unique(customPCH)) > 1) {
+        if (length(unique(plotPCH)) > 1) {
             PCA3D <- plot_ly(
                 plotData,
                 x = plotData$Comp.1,
@@ -176,11 +225,12 @@ server <- function(input, output, session) {
                 type = "scatter3d",
                 mode = "markers",
                 color = plotData$Group,
-                colors = customColors,
-                symbol = ~Group,
-                symbols = customPCH,
-                marker = list(size = pointSize())
-            )}
+                colors = plotColors,
+                symbol = ~ Group,
+                symbols = plotPCH,
+                marker = list(size = input$pointSize)
+            )
+        }
         else{
             PCA3D <- plot_ly(
                 plotData,
@@ -191,11 +241,11 @@ server <- function(input, output, session) {
                 type = "scatter3d",
                 mode = "markers",
                 color = plotData$Group,
-                colors = customColors,
-                symbol = I(unique(customPCH)),
-                marker = list(size = pointSize())
+                colors = plotColors,
+                symbol = I(unique(plotPCH)),
+                marker = list(size = input$pointSize)
             )
-            }
+        }
         PCA3D %>%
             layout(
                 title = input$pcaTitle,
@@ -222,7 +272,58 @@ server <- function(input, output, session) {
             }
     })
 
+    #Render plot to web app
+    output$plot <- renderPlotly({
+        logging::loginfo("output$plot")
+        PCA3D()
+    })
 
+    #Reset to default args
+    observeEvent(input$resetDefaults,
+                 {
+                     output$pchPanel <- renderUI({
+                         logging::loginfo("resetDefaults pchPanel")
+                         lev <-
+                             sort(unique(as.character(prinCompData()$Group)))
+                         customPCH <- validPCH[length(lev)]
+
+                         lapply(seq_along(lev), function(i) {
+                             selectInput(
+                                 inputId = paste0("pch", lev[i]),
+                                 label = paste0("Choose point type for ", lev[i]),
+                                 choices = validPCH,
+                                 selected = validPCH[1]
+                             )
+                         })
+                     })
+
+                     output$colorPanel <- renderUI({
+                         logging::loginfo("resetDefaults colorPanel")
+                         lev <-
+                             sort(unique(as.character(prinCompData()$Group)))
+                         customColors <- gg_fill_hue(length(lev))
+
+                         lapply(seq_along(lev), function(i) {
+                             colourInput(
+                                 inputId = paste0("col", lev[i]),
+                                 label = paste0("Choose color for ", lev[i]),
+                                 value = unique(customColors)[i]
+                             )
+                         })
+                     })
+
+                     logging::loginfo("Reset Size")
+                     updateSliderInput(session, "pointSize", value = 4)
+
+                     logging::loginfo("Reset Labels")
+                     updateCheckboxInput(session, "includeLabels", value = FALSE)
+
+                     logging::loginfo("Reset samples to remove")
+                     updateCheckboxGroupInput(session, "samplesToRemove", selected = character(0))
+
+                     logging::loginfo("Reset Group")
+                     updateSelectInput(session, "Group", selected = 1)
+                 })
 }
 
 shinyApp(ui, server)
