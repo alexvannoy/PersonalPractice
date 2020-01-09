@@ -21,20 +21,22 @@ ui <- fluidPage(
         tabPanel(
             "Sample Set",
 
+            hr(),
             numericInput("SSID", label = "SSID", value = 2),
 
-            textInput("pcaTitle", "Plot Title", value = "PCA")
+            hr(),
+            textInput("pcaTitle", "PCA Title", value = "PCA")
         ),
         tabPanel(
             "Meta data",
             hr(),
+            uiOutput("columnChoices"),
+            hr(),
+
             actionButton("resetDefaults", "Reset to Defaults"),
             hr(),
 
             checkboxInput("includeLabels", label = "Include Labels", value = FALSE),
-            hr(),
-
-            uiOutput("columnChoices"),
             hr(),
 
             sliderInput(
@@ -55,6 +57,7 @@ ui <- fluidPage(
             uiOutput("legendLabels")
         ),
         tabPanel("Samples to Remove",
+                 hr(),
                  uiOutput("samplesToRemove"))
     )),
 
@@ -267,9 +270,10 @@ server <- function(input, output, session) {
                 type = "scatter3d",
                 mode = "markers",
                 color = plotData$Group,
-                colors = plotColors,
+                colors = unique(plotColors),
                 symbol = ~ Group,
                 symbols = plotPCH,
+                opacity = 1,
                 marker = list(size = input$pointSize)
             )
         }
@@ -279,12 +283,13 @@ server <- function(input, output, session) {
                 x = plotData$Comp.1,
                 y = plotData$Comp.2,
                 z = plotData$Comp.3,
-                text =  paste0("Sample: ", plotData$Sample),
+                text =  plotData$Sample,
                 type = "scatter3d",
                 mode = "markers",
                 color = plotData$Group,
-                colors = plotColors,
+                colors = unique(plotColors),
                 symbol = I(unique(plotPCH)),
+                opacity = 1,
                 marker = list(size = input$pointSize)
             )
         }
@@ -299,11 +304,11 @@ server <- function(input, output, session) {
                 legend = list(y = 0.8, yanchor = "top")
             ) %>%
             {
-                #TODO: Figure out a way to avoid the warning this throws. It's not clear why.
+                #TODO: Figure out a way to avoid the warning this throws. It's not clear to me why.
                 if (input$includeLabels) {
                     add_text(
                         .,
-                        text = paste0("Sample: ", plotData$Sample),
+                        text = plotData$Sample,
                         textfont = textOptions,
                         textposition = "top",
                         showlegend = FALSE
@@ -376,9 +381,6 @@ server <- function(input, output, session) {
 
                      logging::loginfo("Reset samples to remove")
                      updateCheckboxGroupInput(session, "samplesToRemove", selected = character(0))
-
-                     logging::loginfo("Reset Group")
-                     updateSelectInput(session, "Group", selected = 1)
                  })
 }
 
