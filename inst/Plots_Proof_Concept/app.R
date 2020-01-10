@@ -3,6 +3,7 @@ library(shiny)
 library(shinyjs)
 library(logging)
 library(colourpicker)
+library(magrittr)
 
 setLevel("DEBUG")
 
@@ -256,9 +257,7 @@ server <- function(input, output, session) {
         plotData$Color = plotColors
         plotData$Group = plotLegend
 
-        textOptions = list(family = "sans serif",
-                           size = 14,
-                           color = toRGB("grey50"))
+        myMode = ifelse(input$includeLabels, "markers+text", "markers")
 
         if (length(unique(plotPCH)) > 1) {
             PCA3D <- plot_ly(
@@ -267,8 +266,9 @@ server <- function(input, output, session) {
                 y = plotData$Comp.2,
                 z = plotData$Comp.3,
                 text = plotData$Sample,
+                hovertext = paste0("Sample: ", plotData$Sample),
                 type = "scatter3d",
-                mode = "markers",
+                mode = myMode,
                 color = plotData$Group,
                 colors = unique(plotColors),
                 symbol = ~ Group,
@@ -277,15 +277,16 @@ server <- function(input, output, session) {
                 marker = list(size = input$pointSize)
             )
         }
-        else{
+        else {
             PCA3D <- plot_ly(
                 plotData,
                 x = plotData$Comp.1,
                 y = plotData$Comp.2,
                 z = plotData$Comp.3,
                 text =  plotData$Sample,
+                hovertext = paste0("Sample: ", plotData$Sample),
                 type = "scatter3d",
-                mode = "markers",
+                mode = myMode,
                 color = plotData$Group,
                 colors = unique(plotColors),
                 symbol = I(unique(plotPCH)),
@@ -293,7 +294,15 @@ server <- function(input, output, session) {
                 marker = list(size = input$pointSize)
             )
         }
-        PCA3D %>%
+
+        margins <- list(
+            l = 50,
+            r = 50,
+            b = 100,
+            t = 100,
+            pad = 4
+        )
+        PCA3D %<>%
             layout(
                 title = input$pcaTitle,
                 scene = list(
@@ -301,22 +310,14 @@ server <- function(input, output, session) {
                     yaxis = list(title = "PC2"),
                     zaxis = list(title = "PC3")
                 ),
-                legend = list(y = 0.8, yanchor = "top")
-            ) %>%
-            {
-                #TODO: Figure out a way to avoid the warning this throws. It's not clear to me why.
-                if (input$includeLabels) {
-                    add_text(
-                        .,
-                        text = plotData$Sample,
-                        textfont = textOptions,
-                        textposition = "top",
-                        showlegend = FALSE
-                    )
-                } else {
-                    .
-                }
-            }
+                legend = list(y = 0.8, yanchor = "top"),
+                width = 800,
+                height = 800,
+                margin = margins
+            )
+
+        logging::logdebug(plotly_json(PCA3D))
+        PCA3D
     })
 
     #Render plot to web app
