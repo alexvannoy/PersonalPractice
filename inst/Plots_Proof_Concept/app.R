@@ -114,7 +114,7 @@ server <- function(input, output, session) {
         #Depends on samplesToRemove, dataFrame(SSID), and Group
         data = dataFrame()
         if (!is.null(input$samplesToRemove)) {
-            data = data[-(which(data$Sample %in% input$samplesToRemove)),]
+            data = data[-(which(data$Sample %in% input$samplesToRemove)), ]
         }
         PCAdata = princomp(data[, 2:ncol(data)], cor = TRUE)
         if (is.null(input$Group)) {
@@ -130,7 +130,7 @@ server <- function(input, output, session) {
                 "Sample" = data$Sample
             )
         }
-        PCAdata = PCAdata[order(PCAdata$Group),]
+        PCAdata = PCAdata[order(PCAdata$Group), ]
         PCAdata
     })
 
@@ -258,7 +258,15 @@ server <- function(input, output, session) {
         plotData$Group = plotLegend
 
         myMode = ifelse(input$includeLabels, "markers+text", "markers")
-
+        if (input$includeLabels) {
+            myTextFont <- list(
+                family = "sans serif",
+                size = "14",
+                color = toRGB("grey50")
+            )
+        } else {
+            myTextFont = NULL
+        }
         if (length(unique(plotPCH)) > 1) {
             PCA3D <- plot_ly(
                 plotData,
@@ -269,12 +277,15 @@ server <- function(input, output, session) {
                 hovertext = paste0("Sample: ", plotData$Sample),
                 type = "scatter3d",
                 mode = myMode,
+                textfont = myTextFont,
                 color = plotData$Group,
                 colors = unique(plotColors),
                 symbol = ~ Group,
                 symbols = plotPCH,
                 opacity = 1,
-                marker = list(size = input$pointSize)
+                marker = list(size = input$pointSize),
+                width = 800,
+                height = 800
             )
         }
         else {
@@ -287,11 +298,14 @@ server <- function(input, output, session) {
                 hovertext = paste0("Sample: ", plotData$Sample),
                 type = "scatter3d",
                 mode = myMode,
+                textfont = myTextFont,
                 color = plotData$Group,
                 colors = unique(plotColors),
                 symbol = I(unique(plotPCH)),
                 opacity = 1,
-                marker = list(size = input$pointSize)
+                marker = list(size = input$pointSize),
+                width = 800,
+                height = 800
             )
         }
 
@@ -311,12 +325,10 @@ server <- function(input, output, session) {
                     zaxis = list(title = "PC3")
                 ),
                 legend = list(y = 0.8, yanchor = "top"),
-                width = 800,
-                height = 800,
                 margin = margins
             )
 
-        logging::logdebug(plotly_json(PCA3D))
+        #logging::logdebug(plotly_json(PCA3D))
         PCA3D
     })
 
